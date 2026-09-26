@@ -28,6 +28,8 @@ fun SettingsScreen(
     onUpdatePairingToken: (String) -> Unit,
     onUpdateAppwriteEndpoint: (String) -> Unit,
     onUpdateAppwriteProjectId: (String) -> Unit,
+    onUpdateAppwriteDatabaseId: (String) -> Unit,
+    onUpdateAppwriteCollectionId: (String) -> Unit,
     onToggleDarkTheme: (Boolean) -> Unit,
     onTestConnection: () -> Unit,
     onClearTestResult: () -> Unit,
@@ -40,6 +42,8 @@ fun SettingsScreen(
     var pairingToken by remember(uiState.pairingToken) { mutableStateOf(uiState.pairingToken) }
     var appwriteEndpoint by remember(uiState.appwriteEndpoint) { mutableStateOf(uiState.appwriteEndpoint) }
     var appwriteProjectId by remember(uiState.appwriteProjectId) { mutableStateOf(uiState.appwriteProjectId) }
+    var appwriteDatabaseId by remember(uiState.appwriteDatabaseId) { mutableStateOf(uiState.appwriteDatabaseId) }
+    var appwriteCollectionId by remember(uiState.appwriteCollectionId) { mutableStateOf(uiState.appwriteCollectionId) }
 
     val scrollState = rememberScrollState()
 
@@ -187,10 +191,47 @@ fun SettingsScreen(
                             onUpdateAppwriteProjectId(it)
                         },
                         label = { Text("Appwrite Project ID") },
-                        placeholder = { Text("edbots_app") },
+                        placeholder = { Text("edsystem") },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth().testTag("settings_appwrite_project_id_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "Premium database (documents for membership lookup)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    OutlinedTextField(
+                        value = appwriteDatabaseId,
+                        onValueChange = {
+                            appwriteDatabaseId = it
+                            onUpdateAppwriteDatabaseId(it)
+                        },
+                        label = { Text("Appwrite Database ID") },
+                        placeholder = { Text("e.g. edbots_main") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("settings_appwrite_database_id_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = appwriteCollectionId,
+                        onValueChange = {
+                            appwriteCollectionId = it
+                            onUpdateAppwriteCollectionId(it)
+                        },
+                        label = { Text("Appwrite Collection ID") },
+                        placeholder = { Text("e.g. premium_members") },
+                    singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("settings_appwrite_collection_id_input")
                     )
                 }
             }

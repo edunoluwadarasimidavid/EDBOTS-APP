@@ -26,12 +26,15 @@ fun AiScreen(
     onSaveConfig: (AiConfig) -> Unit,
     onBack: () -> Unit
 ) {
-    var enabled by remember { mutableStateOf(currentConfig.enabled) }
-    var selectedModel by remember { mutableStateOf(currentConfig.model) }
-    var systemPrompt by remember { mutableStateOf(currentConfig.systemPrompt) }
-    var temperature by remember { mutableFloatStateOf(currentConfig.temperature) }
-    var groupReplies by remember { mutableStateOf(currentConfig.groupRepliesEnabled) }
+    var enabled by remember(currentConfig) { mutableStateOf(currentConfig.enabled) }
+    var selectedModel by remember(currentConfig) { mutableStateOf(currentConfig.model) }
+    var systemPrompt by remember(currentConfig) { mutableStateOf(currentConfig.systemPrompt) }
+    var temperature by remember(currentConfig) { mutableFloatStateOf(currentConfig.temperature) }
+    var groupReplies by remember(currentConfig) { mutableStateOf(currentConfig.groupRepliesEnabled) }
+    var selectedPersonality by remember(currentConfig) { mutableStateOf(currentConfig.personality) }
 
+    // Personalities supported by PATCH /api/ai on the EDBOTS server.
+    val personalities = listOf("friendly", "professional", "funny", "concise", "custom")
     val models = listOf("gemini-1.5-flash", "gemini-1.5-pro", "gpt-4o-mini", "claude-3-haiku")
     val scrollState = rememberScrollState()
 
@@ -42,10 +45,11 @@ fun AiScreen(
                 onBack = onBack,
                 actions = {
                     IconButton(
-                        onClick = {
-                            onSaveConfig(
+                        onClick = {                            onSaveConfig(
                                 AiConfig(
                                     enabled = enabled,
+                                    personality = selectedPersonality,
+                                    provider = currentConfig.provider,
                                     model = selectedModel,
                                     systemPrompt = systemPrompt,
                                     temperature = temperature,
@@ -159,6 +163,46 @@ fun AiScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(text = model, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "Bot Personality",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Personality chips — saved to the server via PATCH /api/ai.
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = CardDefaults.outlinedCardBorder(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Synced to your EDBOTS server",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        personalities.forEach { personality ->
+                            FilterChip(
+                                selected = selectedPersonality == personality,
+                                onClick = { selectedPersonality = personality },
+                                label = { Text(personality.replaceFirstChar { it.uppercase() }, fontSize = 11.sp) },
+                                shape = RoundedCornerShape(8.dp)
+                            )
                         }
                     }
                 }

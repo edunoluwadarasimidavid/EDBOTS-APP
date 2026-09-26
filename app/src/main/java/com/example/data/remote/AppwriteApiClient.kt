@@ -4,6 +4,7 @@ import com.example.data.local.EdBotsPreferences
 import com.example.data.model.AppwriteSession
 import com.example.data.model.AppwriteUser
 import com.example.data.model.NetworkResult
+import com.example.data.model.PremiumStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -166,6 +167,170 @@ class AppwriteApiClient(private val prefs: EdBotsPreferences) {
             NetworkResult.Error("Could not sync preferences: ${e.message}")
         }
     }
+
+    // ── Databases: documents CRUD (premium/backend integration) ─────────────────
+
+    /**
+     * Appwrite Databases documents endpoints. Requires databaseId + collectionId
+     * (Settings → Appwrite, or APPWRITE_DATABASE_ID / APPWRITE_COLLECTION_ID).
+     * Calls are authenticated with the user session (X-Appwrite-Session), so the
+     * collection's permissions must grant access to the `users` team.
+     */
+    private fun requireDatabaseIds(): Pair<String, String>? {
+        val dbId = prefs.appwriteDatabaseId
+        val colId = prefs.appwriteCollectionId
+        return if (dbId.isNotBlank() && colId.isNotBlank()) dbId to colId else null
+    }
+
+    private fun documentPath(documentId: String? = null): String {
+        val (dbId, colId) = requireDatabaseIds()!!
+        val base = "/databases/$dbId/collections/$colId/documents"
+        return if (documentId != null) "$base/$documentId" else base
+    }
+
+    /**
+     * Lists documents in the configured collection, optionally filtered with
+     * Appwrite query strings (e.g. "equal(\"userId\",\"<uid>\")").
+     */
+    suspend fun listDocuments(queries: List<String>? = null): NetworkResult<org.json.JSONArray> =
+        withContext(Dispatchers.IO) {
+            try {
+                if (requireDatabaseIds() == null) {
+                    return@withContext NetworkResult.Error(
+                        "Appwrite database/collection IDs are not configured. Set them in Settings.",
+                        400
+                    )
+                }
+                var url = documentPath()
+                if (!queries.isNullOrEmpty()) {
+                    val encoded = java.net.URLEncoder.encode(
+                        org.json.JSONArray(queries).toString(), "UTF-8"
+                    )
+                    url += "?queries[]=$encoded"
+                }
+                val response = client.newCall(buildRequest(url, "GET")).execute()
+                response.body?.string().orEmpty().let { bodyStr ->
+                    if (!response.isSuccessful) {
+                        return@withContext NetworkResult.Error(
+                            parseErrorMessage(bodyStr, "Failed to list documents (${response.code})"),
+                            response.code
+                        )
+                    }
+                    val obj = JSONObject(bodyStr)
+                    NetworkResult.Success(obj.optJSONArray("documents") ?: org.json.JSONArray())
+                }
+            } catch (e: Exception) {
+                NetworkResult.Error("Failed to load documents: ${e.message}")
+            }
+        }
+
+    /** Creates a document. documentId "unique()" lets Appwrite generate the ID. */
+    suspend fun createDocument(data: JSONObject, documentId: String = "unique()"): NetworkResult<JSONObject> =
+        withContext(Dispatchers.IO) {
+            try {
+                if (requireDatabaseIds() == null) {
+                    return@withContext NetworkResult.Error(
+                        "Appwrite database/collection IDs are not configured. Set them in Settings.",
+                        400
+                    )
+                }
+                val body = JSONObject().put("documentId", documentId).put("data", data)
+                val response = client.newCall(buildRequest(documentPath(), "POST", body.toString())).execute()
+                val bodyStr = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    return@withContext NetworkResult.Error(
+                        parseErrorMessage(bodyStr, "Failed to create document (${response.code})"),
+                        response.code
+                    )
+                }
+                NetworkResult.Success(JSONObject(bodyStr))
+            } catch (e: Exception) {
+                NetworkResult.Error("Failed to create document: ${e.message}")
+            }
+        }
+
+    /** Fetches one document by ID. */
+    suspend fun getDocument(documentId: String): NetworkResult<JSONObject> =
+        withContext(Dispatchers.IO) {
+            try {
+                if (requireDatabaseIds() == null) {
+                    return@withContext NetworkResult.Error(
+                        "Appwrite database/collection IDs are not configured. Set them in Settings.",
+                        400
+                    )
+                }
+                val response = client.newCall(buildRequest(documentPath(documentId), "GET")).execute()
+                val bodyStr = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    return@withContext NetworkResult.Error(
+                        parseErrorMessage(bodyStr, "Failed to read document (${response.code})"),
+                        response.code
+                    )
+                }
+                NetworkResult.Success(JSONObject(bodyStr))
+            } catch (e: Exception) {
+                NetworkResult.Error("Failed to read document: ${e.message}")
+            }
+        }
+
+    /** Deletes one document by ID. */
+    suspend fun deleteDocument(documentId: String): NetworkResult<Boolean> =
+        withContext(Dispatchers.IO) {
+            try {
+                if (requireDatabaseIds() == null) {
+                    return@withContext NetworkResult.Error(
+                        "Appwrite database/collection IDs are not configured. Set them in Settings.",
+                        400
+                    )
+                }
+                val response = client.newCall(buildRequest(documentPath(documentId), "DELETE")).execute()
+                if (!response.isSuccessful) {
+                    return@withContext NetworkResult.Error(
+                        "Failed to delete document (${response.code})",
+                        response.code
+                    )
+                }
+                NetworkResult.Success(true)
+            } catch (e: Exception) {
+                NetworkResult.Error("Failed to delete document: ${e.message}")
+            }
+        }
+
+    /**
+     * Looks up the signed-in user's premium membership document in the configured
+     * collection (expects attributes: userId, plan/tier, expiresAt/active flags —
+     * the exact attribute names stay flexible).
+     */
+    suspend fun getPremiumStatus(userId: String): NetworkResult<PremiumStatus> =
+        withContext(Dispatchers.IO) {
+            when (val res = listDocuments(listOf("equal(\"userId\",\"$userId\")"))) {
+                is NetworkResult.Success -> {
+                    val docs = res.data
+                    if (docs.length() == 0) {
+                        NetworkResult.Success(PremiumStatus(isPremium = false))
+                    } else {
+                        val doc = docs.optJSONObject(0) ?: JSONObject()
+                        val tier = doc.optString("plan", doc.optString("tier", "Free")).ifBlank { "Free" }
+                        val expiresRaw = doc.optString("expiresAt", "")
+                        val expires = if (expiresRaw.isBlank()) null else runCatching {
+                            java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                                timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            }.parse(expiresRaw)?.time
+                        }.getOrNull()
+                        val notExpired = expires == null || expires > System.currentTimeMillis()
+                        NetworkResult.Success(
+                            PremiumStatus(
+                                isPremium = notExpired && tier.isNotBlank() && !tier.equals("Free", ignoreCase = true),
+                                tier = tier,
+                                expiresAt = expires
+                            )
+                        )
+                    }
+                }
+                is NetworkResult.Error -> res
+                NetworkResult.Loading -> NetworkResult.Loading
+            }
+        }
 
     private fun parseErrorMessage(jsonStr: String, fallback: String): String {
         return try {

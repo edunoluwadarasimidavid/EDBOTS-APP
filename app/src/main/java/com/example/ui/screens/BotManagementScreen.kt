@@ -107,9 +107,11 @@ fun BotManagementScreen(
 
                     DetailRow(label = "WhatsApp Number", value = uiState.botDetails.phoneNumber ?: "Not connected")
                     DetailRow(label = "Uptime", value = "${uiState.botDetails.uptimeSeconds / 3600} hours ${(uiState.botDetails.uptimeSeconds % 3600) / 60} mins")
-                    DetailRow(label = "Messages Handled", value = "${uiState.botDetails.messagesProcessed}")
-                    DetailRow(label = "Active Conversations", value = "${uiState.botDetails.activeChats}")
-                    DetailRow(label = "Battery / Power", value = "${uiState.botDetails.batteryLevel}% (Charging)")
+                    DetailRow(label = "Messages Tracked", value = "${uiState.botDetails.messagesProcessed}")
+                    DetailRow(label = "Groups Active Today", value = "${uiState.botDetails.activeChats}")
+                    uiState.botDetails.lastDisconnectReason?.let {
+                        DetailRow(label = "Last Disconnect", value = it)
+                    }
                 }
             }
 

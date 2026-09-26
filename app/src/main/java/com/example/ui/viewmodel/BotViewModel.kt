@@ -23,6 +23,10 @@ data class BotUiState(
     val pairingCodeExpiresAt: Long = 0L,
     val pairingToken: String = "",
     val qrState: String = "INITIALIZING",
+    /** WhatsApp chat JID (e.g. 2348012345678@s.whatsapp.net) that new auto-reply rules target. */
+    val activeChatId: String = "",
+    val qrImage: String? = null,
+    val groups: List<GroupSummary> = emptyList(),
     val usageStats: UsageStats = UsageStats()
 )
 
@@ -34,6 +38,7 @@ class BotViewModel(
     private val _uiState = MutableStateFlow(
         BotUiState(
             pairingToken = prefs.pairingToken,
+            activeChatId = botRepository.activeChatId.value,
             usageStats = botRepository.usageStats.value
         )
     )
@@ -45,6 +50,7 @@ class BotViewModel(
     val groupSettings: StateFlow<GroupSettings> = botRepository.groupSettings
 
     private var pollJob: Job? = null
+    private var pairingPollJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -107,12 +113,109 @@ class BotViewModel(
     fun setPairingToken(token: String) {
         prefs.pairingToken = token
         _uiState.value = _uiState.value.copy(pairingToken = token)
+        // Immediately check pairing state with the new token.
+        checkPairingStatus()
+    }
+
+    /** One-shot GET /pair/status: refreshes QR image, pairing code, and auth state. */
+    fun checkPairingStatus() {
+        viewModelScope.launch {
+            when (val res = botRepository.checkPairingStatus()) {
+                is NetworkResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        qrState = res.data.state ?: "INITIALIZING",
+                        qrImage = res.data.qrImage,
+                        pairingCode = res.data.pairingCode,
+                        pairingCodeExpiresAt = res.data.pairingCodeExpiresAt
+                    )
+                }
+                is NetworkResult.Error -> {
+                    _uiState.value = _uiState.value.copy(errorMessage = res.message)
+                }
+                NetworkResult.Loading -> Unit
+            }
+        }
+    }
+
+    /** Starts a polling loop against /pair/status (docs recommend polling over SSE on mobile). */
+    private fun startPairingPolling() {
+        pairingPollJob?.cancel()
+        pairingPollJob = viewModelScope.launch {
+            val deadline = System.currentTimeMillis() + 5 * 60_000L
+            while (System.currentTimeMillis() < deadline) {
+                when (val res = botRepository.checkPairingStatus()) {
+                    is NetworkResult.Success -> {
+                        _uiState.value = _uiState.value.copy(
+                            qrState = res.data.state ?: "INITIALIZING",
+                            qrImage = res.data.qrImage,
+                            pairingCode = res.data.pairingCode,
+                            pairingCodeExpiresAt = res.data.pairingCodeExpiresAt,
+                            isPairingLoading = false
+                        )
+                        val state = res.data.state
+                        // Stop polling once linked, logged out, or failed.
+                        if (state == "CONNECTED" || state == "LOGGED_OUT" || state == "FAILED") break
+                    }
+                    is NetworkResult.Error -> {
+                        _uiState.value = _uiState.value.copy(isPairingLoading = false, errorMessage = res.message)
+                        break
+                    }
+                    NetworkResult.Loading -> Unit
+                }
+                delay(5000)
+                refreshBotStatus()
+            }
+        }
+    }
+
+    fun setActiveChatId(chatId: String) {
+        botRepository.setActiveChatId(chatId)
+        _uiState.value = _uiState.value.copy(activeChatId = chatId.trim())
+    }
+
+    fun fetchGroups() {
+        viewModelScope.launch {
+            when (val res = botRepository.fetchGroups()) {
+                is NetworkResult.Success -> _uiState.value = _uiState.value.copy(groups = res.data)
+                is NetworkResult.Error -> _uiState.value = _uiState.value.copy(errorMessage = res.message)
+                NetworkResult.Loading -> Unit
+            }
+        }
+    }
+
+    fun loadGroupSettings(groupId: String) {
+        viewModelScope.launch {
+            when (val res = botRepository.loadGroupSettings(groupId)) {
+                is NetworkResult.Error ->
+                    _uiState.value = _uiState.value.copy(errorMessage = res.message)
+                is NetworkResult.Success -> Unit
+                NetworkResult.Loading -> Unit
+            }
+        }
+    }
+
+    fun saveGroupSettings(groupId: String, settings: GroupSettings) {
+        viewModelScope.launch {
+            when (val res = botRepository.saveGroupSettings(groupId, settings)) {
+                is NetworkResult.Success ->
+                    _uiState.value = _uiState.value.copy(successMessage = "Group settings saved to server.")
+                is NetworkResult.Error ->
+                    _uiState.value = _uiState.value.copy(errorMessage = res.message)
+                NetworkResult.Loading -> Unit
+            }
+        }
     }
 
     fun requestPairingCode(phoneNumber: String) {
-        if (phoneNumber.replace(Regex("[^0-9]"), "").length < 7) {
+        if (prefs.pairingToken.isBlank()) {
             _uiState.value = _uiState.value.copy(
-                errorMessage = "Please enter a valid phone number (at least 7 digits)."
+                errorMessage = "Pairing token required. Paste the token from your EDBOTS server console first."
+            )
+            return
+        }
+        if (phoneNumber.replace(Regex("[^0-9]"), "").length < 8) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Please enter a valid phone number (8–15 digits with country code)."
             )
             return
         }
@@ -121,14 +224,13 @@ class BotViewModel(
             _uiState.value = _uiState.value.copy(isPairingLoading = true, errorMessage = null)
             when (val res = botRepository.requestPairingCode(phoneNumber)) {
                 is NetworkResult.Success -> {
-                    // Generate or receive code
-                    val code = res.data.code ?: generateSimulatedPairingCode()
+                    // The server returns 202 with NO code — the real code arrives
+                    // via /pair/status polling (auth.pairingCode) a few seconds later.
                     _uiState.value = _uiState.value.copy(
                         isPairingLoading = false,
-                        pairingCode = code,
-                        pairingCodeExpiresAt = if (res.data.expiresAt > 0) res.data.expiresAt else System.currentTimeMillis() + 180000,
-                        successMessage = "Pairing code generated! Check your WhatsApp notification."
+                        successMessage = "Pairing code requested! The code appears on this screen in a few seconds."
                     )
+                    startPairingPolling()
                 }
                 is NetworkResult.Error -> {
                     _uiState.value = _uiState.value.copy(
@@ -144,13 +246,22 @@ class BotViewModel(
     fun resetPairing() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-            botRepository.resetPairing()
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                pairingCode = null,
-                pairingCodeExpiresAt = 0L,
-                successMessage = "Pairing session reset. You can generate a new QR or code."
-            )
+            pairingPollJob?.cancel()
+            when (val res = botRepository.resetPairing()) {
+                is NetworkResult.Success -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    pairingCode = null,
+                    qrImage = null,
+                    pairingCodeExpiresAt = 0L,
+                    qrState = "WAITING_FOR_AUTH",
+                    successMessage = "Pairing session reset. You can generate a new QR or code."
+                )
+                is NetworkResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    errorMessage = res.message
+                )
+                NetworkResult.Loading -> Unit
+            }
         }
     }
 
@@ -198,6 +309,10 @@ class BotViewModel(
         }
     }
 
+    fun refreshAiConfig() {
+        viewModelScope.launch { botRepository.refreshAiConfig() }
+    }
+
     fun watchBonusAd() {
         // Simulates rewarded advertisement bonus (future monetization compatible)
         viewModelScope.launch {
@@ -215,11 +330,9 @@ class BotViewModel(
         _uiState.value = _uiState.value.copy(errorMessage = null, successMessage = null)
     }
 
-    private fun generateSimulatedPairingCode(): String {
-        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        val part1 = (1..4).map { chars.random() }.joinToString("")
-        val part2 = (1..4).map { chars.random() }.joinToString("")
-        return "$part1-$part2"
+    override fun onCleared() {
+        pairingPollJob?.cancel()
+        super.onCleared()
     }
 
     class Factory(

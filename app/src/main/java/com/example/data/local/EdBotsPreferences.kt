@@ -19,11 +19,16 @@ class EdBotsPreferences(context: Context) {
         private const val KEY_PAIRING_TOKEN = "pairing_token"
         private const val KEY_APPWRITE_ENDPOINT = "appwrite_endpoint"
         private const val KEY_APPWRITE_PROJECT_ID = "appwrite_project_id"
+        private const val KEY_APPWRITE_DATABASE_ID = "appwrite_database_id"
+        private const val KEY_APPWRITE_COLLECTION_ID = "appwrite_collection_id"
         private const val KEY_DARK_THEME = "dark_theme"
 
         const val DEFAULT_API_BASE_URL = "https://edbots.mnz.dom.my.id"
-        const val DEFAULT_APPWRITE_ENDPOINT = "https://cloud.appwrite.io/v1"
-        const val DEFAULT_APPWRITE_PROJECT_ID = "edbots_app"
+        const val DEFAULT_APPWRITE_ENDPOINT = "https://fra.cloud.appwrite.io/v1"
+        const val DEFAULT_APPWRITE_PROJECT_ID = "edsystem"
+        /** Appwrite database/collection backing the premium membership lookup. */
+        const val DEFAULT_APPWRITE_DATABASE_ID = "6ab8072800398585083e"
+        const val DEFAULT_APPWRITE_COLLECTION_ID = "6ab808260033c1647333"
     }
 
     private val _isLoggedIn = MutableStateFlow(isUserLoggedIn())
@@ -92,6 +97,16 @@ class EdBotsPreferences(context: Context) {
     var appwriteProjectId: String
         get() = prefs.getString(KEY_APPWRITE_PROJECT_ID, DEFAULT_APPWRITE_PROJECT_ID) ?: DEFAULT_APPWRITE_PROJECT_ID
         set(value) = prefs.edit().putString(KEY_APPWRITE_PROJECT_ID, value.trim()).apply()
+
+    /** Appwrite Database ID used by the premium/backend integration. */
+    var appwriteDatabaseId: String
+        get() = prefs.getString(KEY_APPWRITE_DATABASE_ID, DEFAULT_APPWRITE_DATABASE_ID) ?: DEFAULT_APPWRITE_DATABASE_ID
+        set(value) = prefs.edit().putString(KEY_APPWRITE_DATABASE_ID, value.trim()).apply()
+
+    /** Appwrite Collection ID (premium membership documents live here). */
+    var appwriteCollectionId: String
+        get() = prefs.getString(KEY_APPWRITE_COLLECTION_ID, DEFAULT_APPWRITE_COLLECTION_ID) ?: DEFAULT_APPWRITE_COLLECTION_ID
+        set(value) = prefs.edit().putString(KEY_APPWRITE_COLLECTION_ID, value.trim()).apply()
 
     var darkTheme: Boolean
         get() = prefs.getBoolean(KEY_DARK_THEME, true)

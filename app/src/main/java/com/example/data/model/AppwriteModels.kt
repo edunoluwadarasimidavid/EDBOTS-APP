@@ -21,3 +21,10 @@ data class AppwriteError(
     val code: Int = 0,
     val type: String? = null
 )
+
+/** Premium membership state resolved from the Appwrite premium collection. */
+data class PremiumStatus(
+    val isPremium: Boolean = false,
+    val tier: String = "Free",
+    val expiresAt: Long? = null
+)

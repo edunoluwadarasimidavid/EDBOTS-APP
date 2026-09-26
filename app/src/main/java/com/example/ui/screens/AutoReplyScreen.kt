@@ -26,12 +26,15 @@ import com.example.ui.theme.EdBotGreen
 @Composable
 fun AutoReplyScreen(
     rules: List<AutoReplyRule>,
+    activeChatId: String?,
+    onSetActiveChatId: (String) -> Unit,
     onAddRule: (trigger: String, response: String, matchType: String) -> Unit,
     onDeleteRule: (id: String) -> Unit,
     onToggleRule: (id: String, enabled: Boolean) -> Unit,
     onBack: () -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+    var chatInput by remember(activeChatId) { mutableStateOf(activeChatId ?: "") }
 
     Scaffold(
         topBar = {
@@ -59,6 +62,48 @@ fun AutoReplyScreen(
                 .padding(innerPadding)
                 .testTag("auto_reply_screen")
         ) {
+            // Chat scope card — the server stores keyword rules per chat JID.
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = CardDefaults.outlinedCardBorder(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Target Chat",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Keyword rules are stored per chat on the server (JID, e.g. 2348012345678@s.whatsapp.net or 123...@g.us).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = chatInput,
+                        onValueChange = { chatInput = it },
+                        label = { Text("Chat JID") },
+                        placeholder = { Text("2348012345678@s.whatsapp.net") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("chat_jid_input")
+                    )
+                    TextButton(
+                        onClick = { onSetActiveChatId(chatInput.trim()) },
+                        enabled = chatInput.trim().contains("@")
+                    ) {
+                        Text(
+                            "Apply Chat Scope",
+                            color = if (chatInput.trim().contains("@")) EdBotGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
             if (rules.isEmpty()) {
                 EmptyStateView(
                     icon = Icons.AutoMirrored.Filled.ReplyAll,

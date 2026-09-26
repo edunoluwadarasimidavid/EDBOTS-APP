@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
@@ -16,21 +17,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.data.model.GroupSettings
+import com.example.data.model.GroupSummary
 import com.example.ui.components.EdBotsTopBar
 import com.example.ui.theme.EdBotGreen
 
 @Composable
 fun GroupsScreen(
     currentSettings: GroupSettings,
+    groups: List<GroupSummary>,
+    selectedGroupId: String?,
+    onFetchGroups: () -> Unit,
+    onSelectGroup: (String) -> Unit,
     onSaveSettings: (GroupSettings) -> Unit,
     onBack: () -> Unit
 ) {
-    var antiLink by remember { mutableStateOf(currentSettings.antiLink) }
-    var welcomeMessage by remember { mutableStateOf(currentSettings.welcomeMessage) }
-    var welcomeText by remember { mutableStateOf(currentSettings.welcomeText) }
-    var leaveOnAntiLink by remember { mutableStateOf(currentSettings.leaveOnAntiLink) }
-    var adminOnlyCommands by remember { mutableStateOf(currentSettings.adminOnlyCommands) }
+    // Reset local edit state whenever the settings object is replaced (e.g. loaded from server).
+    var antiLink by remember(currentSettings) { mutableStateOf(currentSettings.antiLink) }
+    var welcomeMessage by remember(currentSettings) { mutableStateOf(currentSettings.welcomeMessage) }
+    var welcomeText by remember(currentSettings) { mutableStateOf(currentSettings.welcomeText) }
+    var leaveOnAntiLink by remember(currentSettings) { mutableStateOf(currentSettings.leaveOnAntiLink) }
+    var adminOnlyCommands by remember(currentSettings) { mutableStateOf(currentSettings.adminOnlyCommands) }
+    var groupMenuExpanded by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
 
@@ -69,6 +78,70 @@ fun GroupsScreen(
                 .padding(16.dp)
                 .testTag("groups_screen")
         ) {
+            // Group Picker Card — settings apply to the selected WhatsApp group.
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = CardDefaults.outlinedCardBorder(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Target Group",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (selectedGroupId == null)
+                            "Pick a group to manage its moderation settings on the server."
+                        else
+                            "Editing settings for the selected group",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Box {
+                        OutlinedButton(
+                            onClick = {
+                                if (groups.isEmpty()) onFetchGroups() else groupMenuExpanded = true
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("group_picker_btn")
+                        ) {
+                            Icon(imageVector = Icons.Default.Group, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = groups.find { it.id == selectedGroupId }?.name
+                                    ?: (selectedGroupId ?: "Select / refresh groups")
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = groupMenuExpanded,
+                            onDismissRequest = { groupMenuExpanded = false }
+                        ) {
+                            groups.forEach { group ->
+                                DropdownMenuItem(
+                                    text = { Text("${group.name} (${group.size})") },
+                                    onClick = {
+                                        groupMenuExpanded = false
+                                        onSelectGroup(group.id)
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    TextButton(onClick = onFetchGroups) {
+                        Icon(imageVector = Icons.Default.CloudSync, contentDescription = null, tint = EdBotGreen)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Refresh group list from server", color = EdBotGreen)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Group Moderation & Anti-Link Card
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -185,7 +258,7 @@ fun GroupsScreen(
             ) {
                 Icon(imageVector = Icons.Default.Save, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Save Group Settings")
+                Text(if (selectedGroupId != null) "Save To Server" else "Save Locally")
             }
         }
     }

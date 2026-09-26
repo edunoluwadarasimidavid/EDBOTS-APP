@@ -36,6 +36,7 @@ import com.example.ui.components.StatusBadge
 import com.example.ui.theme.EdBotBlue
 import com.example.ui.theme.EdBotGreen
 import com.example.ui.viewmodel.BotUiState
+import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -253,7 +254,7 @@ fun ConnectBotScreen(
 
                             Spacer(modifier = Modifier.height(20.dp))
 
-                            // QR Frame / Canvas
+                            // QR Frame — renders the real QR data-URL from GET /pair/status
                             Box(
                                 modifier = Modifier
                                     .size(240.dp)
@@ -263,13 +264,34 @@ fun ConnectBotScreen(
                                     .padding(16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        imageVector = Icons.Default.QrCode2,
-                                        contentDescription = "QR Code",
-                                        tint = Color(0xFF0F172A),
-                                        modifier = Modifier.size(180.dp)
+                                if (uiState.qrImage != null) {
+                                    AsyncImage(
+                                        model = uiState.qrImage,
+                                        contentDescription = "WhatsApp pairing QR code",
+                                        modifier = Modifier.fillMaxSize()
                                     )
+                                } else {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(
+                                            imageVector = Icons.Default.QrCode2,
+                                            contentDescription = null,
+                                            tint = Color(0xFF0F172A),
+                                            modifier = Modifier.size(120.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = when (uiState.qrState) {
+                                                "WAITING_FOR_AUTH" -> "Waiting for auth…"
+                                                "PAIRING_CODE_REQUESTED" -> "Use the Phone Number tab"
+                                                "CONNECTING" -> "Linking…"
+                                                "CONNECTED" -> "WhatsApp linked!"
+                                                else -> "QR not ready — add pairing token"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF334155),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
                                 }
                             }
 
@@ -299,7 +321,7 @@ fun ConnectBotScreen(
                             ) {
                                 Icon(imageVector = Icons.Default.Refresh, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Refresh QR Code")
+                                Text("Check Pairing Status")
                             }
                         }
                     }

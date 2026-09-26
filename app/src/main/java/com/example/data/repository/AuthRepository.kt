@@ -3,6 +3,7 @@ package com.example.data.repository
 import com.example.data.local.EdBotsPreferences
 import com.example.data.model.AppwriteUser
 import com.example.data.model.NetworkResult
+import com.example.data.model.PremiumStatus
 import com.example.data.remote.AppwriteApiClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +25,25 @@ class AuthRepository(
     val currentUser: StateFlow<AppwriteUser?> = _currentUser.asStateFlow()
 
     val isLoggedIn: StateFlow<Boolean> = prefs.isLoggedIn
+
+    private val _premiumStatus = MutableStateFlow(PremiumStatus())
+    val premiumStatus: StateFlow<PremiumStatus> = _premiumStatus.asStateFlow()
+
+    /**
+     * Resolves the signed-in user's premium membership from the Appwrite premium
+     * collection (needs APPWRITE_DATABASE_ID / APPWRITE_COLLECTION_ID in Settings).
+     */
+    suspend fun refreshPremiumStatus(): NetworkResult<PremiumStatus> {
+        val user = _currentUser.value
+        if (user == null || !prefs.isUserLoggedIn()) {
+            return NetworkResult.Error("Not authenticated")
+        }
+        val res = appwriteClient.getPremiumStatus(user.id)
+        if (res is NetworkResult.Success) {
+            _premiumStatus.value = res.data
+        }
+        return res
+    }
 
     suspend fun register(name: String, email: String, pass: String): NetworkResult<AppwriteUser> {
         val res = appwriteClient.register(name, email, pass)

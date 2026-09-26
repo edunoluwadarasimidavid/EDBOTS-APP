@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.AppwriteUser
 import com.example.data.model.NetworkResult
+import com.example.data.model.PremiumStatus
 import com.example.data.repository.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,7 +17,8 @@ data class AuthUiState(
     val errorMessage: String? = null,
     val successMessage: String? = null,
     val user: AppwriteUser? = null,
-    val isLoggedIn: Boolean = false
+    val isLoggedIn: Boolean = false,
+    val premiumStatus: PremiumStatus? = null
 )
 
 class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
@@ -38,6 +40,15 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                 )
             }
         }
+        viewModelScope.launch {
+            authRepository.premiumStatus.collect { premium ->
+                _uiState.value = _uiState.value.copy(premiumStatus = premium)
+            }
+        }
+        // Restore premium state for an existing session on startup.
+        if (authRepository.isLoggedIn.value) {
+            refreshPremiumStatus()
+        }
     }
 
     fun login(email: String, pass: String) {
@@ -55,6 +66,7 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                         isLoggedIn = true,
                         successMessage = "Welcome back, ${res.data.name}!"
                     )
+                    refreshPremiumStatus()
                 }
                 is NetworkResult.Error -> {
                     _uiState.value = _uiState.value.copy(
@@ -91,6 +103,7 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                         isLoggedIn = true,
                         successMessage = "Account created successfully!"
                     )
+                    refreshPremiumStatus()
                 }
                 is NetworkResult.Error -> {
                     _uiState.value = _uiState.value.copy(
@@ -108,6 +121,13 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
             _uiState.value = _uiState.value.copy(isLoading = true)
             authRepository.logout()
             _uiState.value = AuthUiState(isLoggedIn = false, user = null)
+        }
+    }
+
+    fun refreshPremiumStatus() {
+        viewModelScope.launch {
+            // Best-effort: a missing/unconfigured collection simply keeps Free tier.
+            authRepository.refreshPremiumStatus()
         }
     }
 

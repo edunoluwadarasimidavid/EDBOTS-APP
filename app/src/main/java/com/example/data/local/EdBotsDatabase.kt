@@ -17,7 +17,7 @@ import com.example.data.local.entity.CommandEntity
         CommandEntity::class,
         AutoReplyEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class EdBotsDatabase : RoomDatabase() {

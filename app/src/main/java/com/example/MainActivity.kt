@@ -150,7 +150,7 @@ class MainActivity : ComponentActivity() {
                             onRequestPhoneCode = { phone -> botViewModel.requestPairingCode(phone) },
                             onResetPairing = { botViewModel.resetPairing() },
                             onSetPairingToken = { token -> botViewModel.setPairingToken(token) },
-                            onRefreshStatus = { botViewModel.refreshBotStatus() },
+                            onRefreshStatus = { botViewModel.checkPairingStatus() },
                             onClearError = { botViewModel.clearMessages() }
                         )
                     }
@@ -179,6 +179,8 @@ class MainActivity : ComponentActivity() {
                     composable(Screen.AutoReply.route) {
                         AutoReplyScreen(
                             rules = autoReplies,
+                            activeChatId = botUiState.activeChatId.ifBlank { null },
+                            onSetActiveChatId = { botViewModel.setActiveChatId(it) },
                             onAddRule = { trigger, response, matchType ->
                                 botViewModel.addAutoReply(trigger, response, matchType)
                             },
@@ -189,6 +191,8 @@ class MainActivity : ComponentActivity() {
                     }
 
                     composable(Screen.AiConfig.route) {
+                        // Pull the server-synced AI settings (enabled + personality).
+                        LaunchedEffect(Unit) { botViewModel.refreshAiConfig() }
                         AiScreen(
                             currentConfig = aiConfig,
                             onSaveConfig = { config ->
@@ -200,10 +204,24 @@ class MainActivity : ComponentActivity() {
                     }
 
                     composable(Screen.Groups.route) {
+                        // Load real WhatsApp groups from GET /api/groups.
+                        LaunchedEffect(Unit) { botViewModel.fetchGroups() }
                         GroupsScreen(
                             currentSettings = groupSettings,
+                            groups = botUiState.groups,
+                            selectedGroupId = botUiState.activeChatId.ifBlank { null },
+                            onFetchGroups = { botViewModel.fetchGroups() },
+                            onSelectGroup = {
+                                botViewModel.setActiveChatId(it)
+                                botViewModel.loadGroupSettings(it)
+                            },
                             onSaveSettings = { settings ->
-                                botViewModel.updateGroupSettings(settings)
+                                val groupId = botUiState.activeChatId
+                                if (groupId.isNotBlank()) {
+                                    botViewModel.saveGroupSettings(groupId, settings)
+                                } else {
+                                    botViewModel.updateGroupSettings(settings)
+                                }
                                 navController.popBackStack()
                             },
                             onBack = { navController.popBackStack() }
@@ -221,6 +239,8 @@ class MainActivity : ComponentActivity() {
                             },
                             onUpdateAppwriteEndpoint = { settingsViewModel.updateAppwriteEndpoint(it) },
                             onUpdateAppwriteProjectId = { settingsViewModel.updateAppwriteProjectId(it) },
+                            onUpdateAppwriteDatabaseId = { settingsViewModel.updateAppwriteDatabaseId(it) },
+                            onUpdateAppwriteCollectionId = { settingsViewModel.updateAppwriteCollectionId(it) },
                             onToggleDarkTheme = { settingsViewModel.setDarkTheme(it) },
                             onTestConnection = { settingsViewModel.testConnection() },
                             onClearTestResult = { settingsViewModel.clearTestResult() },
@@ -237,6 +257,7 @@ class MainActivity : ComponentActivity() {
                     composable(Screen.Profile.route) {
                         ProfileScreen(
                             user = authUiState.user,
+                            premiumStatus = authUiState.premiumStatus,
                             onLogout = {
                                 authViewModel.logout()
                                 navController.navigate(Screen.Login.route) {

@@ -17,6 +17,8 @@ data class SettingsUiState(
     val pairingToken: String = "",
     val appwriteEndpoint: String = "",
     val appwriteProjectId: String = "",
+    val appwriteDatabaseId: String = "",
+    val appwriteCollectionId: String = "",
     val darkTheme: Boolean = true,
     val isTestingConnection: Boolean = false,
     val connectionTestResult: String? = null,
@@ -35,6 +37,8 @@ class SettingsViewModel(
             pairingToken = prefs.pairingToken,
             appwriteEndpoint = prefs.appwriteEndpoint,
             appwriteProjectId = prefs.appwriteProjectId,
+            appwriteDatabaseId = prefs.appwriteDatabaseId,
+            appwriteCollectionId = prefs.appwriteCollectionId,
             darkTheme = prefs.darkTheme
         )
     )
@@ -65,6 +69,16 @@ class SettingsViewModel(
         _uiState.value = _uiState.value.copy(appwriteProjectId = id)
     }
 
+    fun updateAppwriteDatabaseId(id: String) {
+        prefs.appwriteDatabaseId = id
+        _uiState.value = _uiState.value.copy(appwriteDatabaseId = id)
+    }
+
+    fun updateAppwriteCollectionId(id: String) {
+        prefs.appwriteCollectionId = id
+        _uiState.value = _uiState.value.copy(appwriteCollectionId = id)
+    }
+
     fun setDarkTheme(enabled: Boolean) {
         prefs.darkTheme = enabled
         _uiState.value = _uiState.value.copy(darkTheme = enabled)
@@ -73,12 +87,16 @@ class SettingsViewModel(
     fun testConnection() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isTestingConnection = true, connectionTestResult = null)
-            val result = edbotsClient.checkPairingStatus()
+            // /api/health is public — it verifies the server is reachable without needing a key.
+            val result = edbotsClient.getHealth()
             when (result) {
                 is NetworkResult.Success -> {
+                    val body = result.data
+                    val version = body.optString("version", "?")
+                    val botVersion = body.optString("botVersion", "?")
                     _uiState.value = _uiState.value.copy(
                         isTestingConnection = false,
-                        connectionTestResult = "Connection successful! Server is online and responding.",
+                        connectionTestResult = "Connected! EDBOTS API v$version (bot v$botVersion) is online.",
                         isSuccess = true
                     )
                 }

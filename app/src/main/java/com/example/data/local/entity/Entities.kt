@@ -30,6 +30,8 @@ data class CommandEntity(
 @Entity(tableName = "auto_replies")
 data class AutoReplyEntity(
     @PrimaryKey val id: String,
+    /** WhatsApp chat JID this rule belongs to (e.g. 2348012345678@s.whatsapp.net). */
+    val chatId: String = "",
     val trigger: String,
     val response: String,
     val matchType: String,

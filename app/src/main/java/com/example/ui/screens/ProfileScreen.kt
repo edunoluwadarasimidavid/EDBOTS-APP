@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AppwriteUser
+import com.example.data.model.PremiumStatus
 import com.example.ui.components.EdBotsTopBar
 import com.example.ui.theme.EdBotBlue
 import com.example.ui.theme.EdBotGreen
@@ -27,6 +28,7 @@ import com.example.ui.theme.EdBotGreen
 @Composable
 fun ProfileScreen(
     user: AppwriteUser?,
+    premiumStatus: PremiumStatus?,
     onLogout: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -105,6 +107,34 @@ fun ProfileScreen(
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         fontWeight = FontWeight.SemiBold
                     )
+                }
+            }
+
+            if (premiumStatus != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (premiumStatus.isPremium) EdBotBlue.copy(alpha = 0.15f)
+                            else MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (premiumStatus.isPremium) Icons.Default.WorkspacePremium else Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = if (premiumStatus.isPremium) EdBotBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (premiumStatus.isPremium) "${premiumStatus.tier} Member" else "Free Tier",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (premiumStatus.isPremium) EdBotBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
 

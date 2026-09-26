@@ -9,13 +9,19 @@ enum class BotConnectionState {
     ERROR;
 
     companion object {
+        /**
+         * Maps server status values to UI states. The EDBOTS API reports
+         * lowercase `offline | connecting | online`; pairing auth states are
+         * uppercase (WAITING_FOR_AUTH, QR_READY, CONNECTED, FAILED, ...).
+         */
         fun fromString(str: String?): BotConnectionState {
-            return when (str?.uppercase()) {
-                "CONNECTED" -> CONNECTED
+            return when (str?.trim()?.uppercase()) {
+                "ONLINE", "CONNECTED" -> CONNECTED
                 "CONNECTING" -> CONNECTING
-                "INITIALIZING" -> INITIALIZING
+                "INITIALIZING", "WAITING_FOR_AUTH", "QR_READY", "PAIRING_CODE_REQUESTED" -> INITIALIZING
                 "LOGGED_OUT" -> LOGGED_OUT
-                "DISCONNECTED" -> DISCONNECTED
+                "FAILED", "ERROR" -> ERROR
+                "OFFLINE", "DISCONNECTED" -> DISCONNECTED
                 else -> DISCONNECTED
             }
         }
@@ -25,14 +31,16 @@ enum class BotConnectionState {
 data class BotDetails(
     val id: String = "edbot_1",
     val name: String = "EDBOTS Master",
-    val phoneNumber: String? = "+1 (555) 019-2831",
+    val phoneNumber: String? = null,
     val state: BotConnectionState = BotConnectionState.DISCONNECTED,
     val uptimeSeconds: Long = 0L,
     val messagesProcessed: Long = 0L,
     val activeChats: Int = 0,
-    val batteryLevel: Int = 92,
-    val isCharging: Boolean = true,
-    val lastSeenTimestamp: Long = System.currentTimeMillis()
+    /** The real API exposes no battery info; 0 means "not available". */
+    val batteryLevel: Int = 0,
+    val isCharging: Boolean = false,
+    val lastSeenTimestamp: Long = System.currentTimeMillis(),
+    val lastDisconnectReason: String? = null
 )
 
 data class PairingStatusResponse(
@@ -40,6 +48,14 @@ data class PairingStatusResponse(
     val authState: String? = null,
     val state: String? = null,
     val tokenValid: Boolean = true,
+    /** PNG data-URL of the QR code, only present when state == QR_READY. */
+    val qrImage: String? = null,
+    /** Short-lived display code, e.g. "ABCD-EFGH", while a code pairing is active. */
+    val pairingCode: String? = null,
+    /** Epoch millis when [pairingCode] expires (0 = unknown). */
+    val pairingCodeExpiresAt: Long = 0L,
+    /** Machine reason string when state == FAILED. */
+    val failureReason: String? = null,
     val error: String? = null
 )
 
@@ -59,8 +75,13 @@ data class BotCommand(
     val adminOnly: Boolean = false
 )
 
+/**
+ * Keyword-based auto-reply rule. On the server, rules live per chat JID
+ * (POST /api/autoreply/chat/{chatId}/keywords).
+ */
 data class AutoReplyRule(
     val id: String,
+    val chatId: String = "",
     val trigger: String,
     val response: String,
     val matchType: String = "EXACT", // EXACT, CONTAINS, STARTS_WITH
@@ -69,6 +90,8 @@ data class AutoReplyRule(
 
 data class AiConfig(
     val enabled: Boolean = true,
+    /** Server-supported personality: friendly | professional | funny | concise | custom. */
+    val personality: String = "friendly",
     val provider: String = "Gemini",
     val model: String = "gemini-1.5-flash",
     val systemPrompt: String = "You are EDBOTS, a helpful WhatsApp AI assistant.",
@@ -82,6 +105,14 @@ data class GroupSettings(
     val welcomeText: String = "Welcome @user to the group! Please adhere to group rules.",
     val leaveOnAntiLink: Boolean = false,
     val adminOnlyCommands: Boolean = false
+)
+
+/** Group summary from GET /api/groups. */
+data class GroupSummary(
+    val id: String,
+    val name: String,
+    val size: Int = 0,
+    val isBotAdmin: Boolean = false
 )
 
 data class UsageStats(
