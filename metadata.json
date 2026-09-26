@@ -1,0 +1,6 @@
+{
+  "name": "EDBOTS",
+  "description": "WhatsApp bot management and control panel application powered by EDBOTS server and Appwrite.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
