@@ -37,7 +37,7 @@ class EdBotsApiClient(private val prefs: EdBotsPreferences) {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-    // ── Low-level helpers ───────────────────────────────────────────────────────
+    // ── Low-level helpers ──────────────────────────────────────────────────────
 
     private fun buildRequest(
         path: String,
