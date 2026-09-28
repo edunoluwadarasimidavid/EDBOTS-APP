@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 data class SettingsUiState(
     val apiBaseUrl: String = "",
@@ -90,8 +91,8 @@ class SettingsViewModel(
             // /api/health is public — it verifies the server is reachable without needing a key.
             val result = edbotsClient.getHealth()
             when (result) {
-                is NetworkResult.Success -> {
-                    val body = result.data
+                is NetworkResult.Success<*> -> {
+                    val body = result.data as JSONObject
                     val version = body.optString("version", "?")
                     val botVersion = body.optString("botVersion", "?")
                     _uiState.value = _uiState.value.copy(
@@ -122,6 +123,9 @@ class SettingsViewModel(
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            require(modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
+                "Unknown ViewModel class: ${modelClass.name}"
+            }
             return SettingsViewModel(prefs, edbotsClient) as T
         }
     }
