@@ -27,12 +27,6 @@ android {
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
     }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
-    }
   }
 
   buildTypes {
@@ -42,7 +36,11 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
-    debug { signingConfig = signingConfigs.getByName("debugConfig") }
+    debug {
+      // Use the standard Android debug keystore (no custom keystore required)
+      // The debug keystore is automatically created by the Android SDK at:
+      // ~/.android/debug.keystore with default credentials (android/android)
+    }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
